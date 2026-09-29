@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F4E4B">
+<title>XBee Link (phone Bluetooth)</title>
+<style>
+  :root {
+    --paper: #EEF1F2; --panel: #FFFFFF; --ink: #16232B; --muted: #5B6B73;
+    --mask: #1F4E4B; --mask-soft: #D6E4E2; --amber: #D99A1E; --fault: #B83A26;
+    --line: #CBD4D7;
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #0F1A1F; --panel: #172730; --ink: #E3EAEC; --muted: #93A4AB;
+      --mask: #3D8C85; --mask-soft: #1E3A3C; --line: #2A3D46; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.45 var(--ui); }
+  body { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+  header {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--mask); color: #F2F7F6;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 14px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .led { width: 14px; height: 14px; border-radius: 50%; background: #54676C; flex: none;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,.25); transition: background .2s; }
+  .led.on { background: #6EE08A; }
+  .led.busy { background: var(--amber); }
+  .led.blink { animation: blink .25s; }
+  @keyframes blink { 50% { background: #FFF6D8; } }
+  header h1 { font-size: 1.15rem; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+  header p { margin: 0; font-size: .85rem; opacity: .8; }
+
+  main { max-width: 560px; margin: 0 auto; padding: 16px 14px 32px; display: grid; gap: 14px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  h2 { font-size: 1rem; margin: 0 0 12px; font-weight: 650; }
+
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea {
+    width: 100%; font: inherit; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px;
+  }
+  textarea { min-height: 76px; resize: vertical; font-family: var(--mono); font-size: .92rem; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+    outline: 3px solid var(--amber); outline-offset: 1px;
+  }
+  .row { display: flex; gap: 10px; align-items: end; }
+  .row > * { flex: 1; }
+  .row > .narrow { flex: 0 0 90px; }
+
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 10px;
+    padding: 12px 16px; background: var(--mask); color: #fff; min-height: 46px; cursor: pointer;
+  }
+  button.quiet { background: var(--mask-soft); color: var(--ink); }
+  button:disabled, button.dim { opacity: .45; cursor: default; }
+  .actions { display: flex; gap: 10px; margin-top: 14px; }
+  .actions button { flex: 1; }
+
+  .devices { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+  .devices li button {
+    width: 100%; text-align: left; background: var(--paper); color: var(--ink);
+    border: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; font-weight: 500;
+  }
+  .devices li button[aria-pressed="true"] { border-color: var(--mask); box-shadow: inset 0 0 0 1px var(--mask); }
+  .devices small { color: var(--muted); font-weight: 400; }
+  .tag { font-size: .75rem; background: var(--mask); color: #fff; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+  .empty { color: var(--muted); font-size: .9rem; margin: 10px 0 0; }
+
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { background: transparent; color: var(--ink); border-radius: 0; min-height: 38px; padding: 6px 14px; font-weight: 500; }
+  .seg button[aria-pressed="true"] { background: var(--mask); color: #fff; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: .9rem; }
+  .check input { width: auto; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chips button { background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    min-height: 34px; padding: 4px 10px; font-weight: 500; font-size: .88rem; }
+  .chips button.danger { color: var(--fault); border-color: var(--fault); }
+
+  #log { font-family: var(--mono); font-size: .8rem; max-height: 46vh; overflow-y: auto;
+    background: var(--paper); border-radius: 10px; padding: 8px 10px; margin: 0; }
+  #log div { padding: 3px 0; border-bottom: 1px solid var(--line); word-break: break-word; }
+  #log div:last-child { border-bottom: 0; }
+  #log time { color: var(--muted); margin-right: 6px; }
+  #log .in { color: var(--mask); }
+  #log .err { color: var(--fault); }
+  #log .hex { display: block; color: var(--muted); }
+  @media (prefers-color-scheme: dark) { #log .in { color: #7FD1C7; } }
+  @media (prefers-reduced-motion: reduce) { .led.blink { animation: none; } }
+
+  .note { font-size: .88rem; color: var(--muted); margin: 0 0 4px; }
+  .file-pick { display: flex; align-items: center; gap: 10px; }
+  .file-pick span { font-size: .9rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .file-pick label { margin: 0; flex: none; font-size: .95rem; font-weight: 600; color: var(--ink);
+    background: var(--mask-soft); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  .file-pick input:focus-visible + label { outline: 3px solid var(--amber); outline-offset: 1px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--mask-soft); overflow: hidden; margin-top: 12px; }
+  .bar div { height: 100%; width: 0; background: var(--mask); transition: width .15s; }
+  #otaInfo { font-size: .9rem; margin: 12px 0 0; padding: 10px 12px; border-radius: 10px;
+    background: var(--paper); white-space: pre-wrap; font-family: var(--mono); font-size: .8rem; }
+  #otaInfo.bad { color: var(--fault); }
+  .files { list-style: none; margin: 10px 0 0; padding: 0; font-family: var(--mono); font-size: .85rem; }
+  .files li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .files li:last-child { border-bottom: 0; }
+  .files small { color: var(--muted); }
+
+  .note { font-size: .88rem; color: var(--muted); margin: 0 0 4px; }
+  .picked { font-size: .95rem; margin: 10px 0 0; }
+  .picked b { font-weight: 600; }
+  #support { border-color: var(--fault); }
+  #support p { margin: 0 0 8px; }
+  #support p:last-child { margin: 0; }
+</style>
+</head>
+<body>
+<header>
+  <span class="led" id="led" aria-hidden="true"></span>
+  <div>
+    <h1 id="title">No XBee connected</h1>
+    <p id="subtitle">Using this phone's Bluetooth</p>
+  </div>
+</header>
+
+<main>
+  <section id="support" hidden>
+    <h2>Bluetooth isn't available in this browser</h2>
+    <p id="supportWhy"></p>
+  </section>
+
+  <section id="connectCard">
+    <h2>Device</h2>
+    <button class="quiet" id="pickBtn" style="width:100%">Choose XBee</button>
+    <label class="check"><input type="checkbox" id="showAll"> Show all Bluetooth devices (if your XBee isn't listed)</label>
+    <p class="picked" id="picked" hidden></p>
+    <label for="pw">Bluetooth password</label>
+    <input id="pw" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Set in XCTU">
+    <label class="check"><input type="checkbox" id="rememberPw"> Remember password on this phone</label>
+    <div class="actions">
+      <button id="connectBtn" disabled>Connect</button>
+      <button class="quiet" id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Send data</h2>
+    <div class="row">
+      <div>
+        <label for="iface">Deliver to</label>
+        <select id="iface">
+          <option value="0">Serial port (UART)</option>
+          <option value="2">MicroPython</option>
+        </select>
+      </div>
+      <div class="seg" role="group" aria-label="Data format" id="dataFmt">
+        <button aria-pressed="true" data-v="text">Text</button>
+        <button aria-pressed="false" data-v="hex">Hex</button>
+      </div>
+    </div>
+    <label for="data">Message</label>
+    <textarea id="data" placeholder="Hello from my phone"></textarea>
+    <label class="check"><input type="checkbox" id="newline" checked> Add line ending (CR LF)</label>
+    <div class="actions"><button class="needs-link" id="sendBtn">Send</button></div>
+  </section>
+
+  <section>
+    <h2>AT command</h2>
+    <div class="row">
+      <div class="narrow">
+        <label for="cmd">Command</label>
+        <input id="cmd" maxlength="2" autocapitalize="characters" placeholder="NI">
+      </div>
+      <div>
+        <label for="param">Value (leave empty to read)</label>
+        <input id="param" placeholder="">
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="paramHex"> Value is hex</label>
+    <div class="chips" id="chips">
+      <button data-cmd="NI" title="Node identifier">NI name</button>
+      <button data-cmd="SH" title="Serial number high">SH</button>
+      <button data-cmd="SL" title="Serial number low">SL</button>
+      <button data-cmd="VR" title="Firmware version">VR firmware</button>
+      <button data-cmd="TP" title="Temperature">TP temp</button>
+      <button data-cmd="%V" title="Supply voltage">%V voltage</button>
+      <button data-cmd="DB" title="Last RSSI">DB signal</button>
+      <button data-cmd="FR" title="Software reset" class="danger">FR reboot</button>
+    </div>
+    <div class="actions"><button class="needs-link" id="atBtn">Run command</button></div>
+  </section>
+
+  <section>
+    <h2>MicroPython program</h2>
+    <p class="note">Replaces a file on the XBee over Bluetooth. Keep this page open and the
+      screen on until the upload finishes.</p>
+    <div class="file-pick">
+      <input type="file" id="otaFile" accept=".py,.mpy,.txt,.json">
+      <label for="otaFile">Choose file</label>
+      <span id="otaFileName">No file chosen</span>
+    </div>
+    <label for="otaName">Save on the XBee as</label>
+    <input id="otaName" value="app.py" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="check"><input type="checkbox" id="otaReboot" checked> Reboot and start it afterwards</label>
+    <div class="bar" id="otaBar" hidden><div></div></div>
+    <div class="actions"><button class="needs-link ota" id="otaUpload">Upload</button></div>
+    <div class="chips" id="otaChips">
+      <button class="ota" data-ota="check" title="Is the program running?">Check status</button>
+      <button class="ota" data-ota="list" title="List files on the XBee">List files</button>
+      <button class="ota" data-ota="rollback" title="Put back the version before the last upload">Undo last upload</button>
+      <button class="ota danger" data-ota="recover" title="Reboot and keep the program from starting">Stop program</button>
+    </div>
+    <div id="otaInfo" hidden></div>
+    <ul class="files" id="otaFiles" hidden></ul>
+  </section>
+
+  <section>
+    <div class="row" style="align-items:center; margin-bottom:10px">
+      <h2 style="margin:0">Traffic</h2>
+      <button class="quiet" id="clearBtn" style="flex:0 0 auto; min-height:36px; padding:6px 12px">Clear</button>
+    </div>
+    <div id="log" aria-live="polite"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// ================= XBee API over BLE (runs on the phone) =================
+const SERVICE_UUID = "53da53b9-0447-425a-b9ea-9837505eb59a";
+const WRITE_UUID   = "7dddca00-3e05-4651-9254-44074792c590";   // API request (write)
+const NOTIFY_UUID  = "f9279ee9-2cd0-410c-81cc-adf11e4e5aea";   // API response (indicate)
+const BLE_WRITE = 20;         // bytes per GATT write (safe for the default MTU)
+
+// SRP-6a, 1024-bit group from RFC 5054, SHA-256, as the XBee implements it.
+const SRP_N = BigInt("0xEEAF0AB9ADB38DD69C33F80AFA8FC5E86072618775FF3C0B9EA2314C9C256576D674DF74" +
+  "96EA81D3383B4813D692C6E0E0D5D8E250B98BE48E495C1D6089DAD15DC7D7B46154D6B6" +
+  "CE8EF4AD69B15D4982559B297BCF1885C529F566660E57EC68EDBC3C05726CC02FD4CBF4" +
+  "976EAA9AFD5138FE8376435B9FC61D2FC0EB06E3");
+const SRP_G = 2n, SRP_NLEN = 128;
+
+const UNLOCK_ERRORS = {
+  0x80: "XBee could not generate its SRP key (crypto error)",
+  0x81: "Unlock payload had the wrong length",
+  0x82: "Wrong Bluetooth password",
+  0x83: "XBee is out of resources, try again",
+  0x84: "Unlock steps arrived out of order",
+};
+const AT_STATUS = { 0: "OK", 1: "ERROR", 2: "Invalid command", 3: "Invalid parameter" };
+const IFACES = { 0: "Serial", 1: "Bluetooth", 2: "MicroPython" };
+const RELAY_STATUS = {
+  0x7C: "that interface doesn't exist",
+  0x7D: "the interface isn't accepting data. For the serial port, set AP = 1 (API mode); " +
+        "for MicroPython, make sure a program is running",
+};
+
+const utf8 = new TextEncoder();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function concat(...parts) {
+  const arrs = parts.map(p => p instanceof Uint8Array ? p : Uint8Array.from(p));
+  const out = new Uint8Array(arrs.reduce((n, a) => n + a.length, 0));
+  let o = 0; for (const a of arrs) { out.set(a, o); o += a.length; }
+  return out;
+}
+const hex = b => Array.from(b, x => x.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+const printable = b => Array.from(b, c => c >= 32 && c < 127 ? String.fromCharCode(c) : ".").join("");
+const sameBytes = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+async function H(...parts) { return new Uint8Array(await crypto.subtle.digest("SHA-256", concat(...parts))); }
+function b2i(b) { let h = "0x0"; for (const x of b) h += x.toString(16).padStart(2, "0"); return BigInt(h); }
+function i2b(n, len = SRP_NLEN) {
+  let h = n.toString(16); if (h.length % 2) h = "0" + h;
+  const raw = h.match(/../g).map(x => parseInt(x, 16));
+  const out = new Uint8Array(len); out.set(raw.slice(-len), Math.max(0, len - raw.length)); return out;
+}
+function modpow(b, e, m) {
+  let r = 1n; b %= m;
+  while (e > 0n) { if (e & 1n) r = r * b % m; e >>= 1n; b = b * b % m; }
+  return r;
+}
+function withTimeout(p, ms, msg) {
+  let t; return Promise.race([p, new Promise((_, rej) => t = setTimeout(() => rej(new Error(msg)), ms))])
+    .finally(() => clearTimeout(t));
+}
+
+function buildFrame(data) {
+  const n = data.length, sum = data.reduce((s, v) => s + v, 0);
+  return concat([0x7E, n >> 8, n & 0xFF], data, [0xFF - (sum & 0xFF)]);
+}
+
+class FrameParser {           // reassembles API frames split across BLE indications
+  constructor() { this.buf = new Uint8Array(0); }
+  feed(chunk) {
+    this.buf = concat(this.buf, chunk);
+    const frames = [];
+    for (;;) {
+      const start = this.buf.indexOf(0x7E);
+      if (start < 0) { this.buf = new Uint8Array(0); break; }
+      if (start) this.buf = this.buf.slice(start);
+      if (this.buf.length < 3) break;
+      const len = (this.buf[1] << 8) | this.buf[2];
+      if (this.buf.length < len + 4) break;
+      const data = this.buf.slice(3, 3 + len), chk = this.buf[3 + len];
+      this.buf = this.buf.slice(len + 4);
+      if (((data.reduce((s, v) => s + v, 0) + chk) & 0xFF) === 0xFF) frames.push(data);
+      else logLine("Dropped a frame with a bad checksum", "err");
+    }
+    return frames;
+  }
+}
+
+class CtrStream {             // AES-CTR as one continuous keystream, like the XBee uses
+  constructor(key, nonce) { this.key = key; this.nonce = nonce; this.pos = 0; }
+  async update(data) {
+    const off = this.pos % 16, block = Math.floor(this.pos / 16) + 1;   // counter starts at 1
+    this.pos += data.length;
+    const buf = new Uint8Array(off + data.length); buf.set(data, off);
+    const ctr = new Uint8Array(16); ctr.set(this.nonce);
+    new DataView(ctr.buffer).setUint32(12, block >>> 0);
+    const out = await crypto.subtle.encrypt({ name: "AES-CTR", counter: ctr, length: 32 }, this.key, buf);
+    return new Uint8Array(out).subarray(off);
+  }
+}
+
+class XBeeLink {
+  constructor(onFrame) {
+    this.onFrame = onFrame;
+    this.parser = new FrameParser();
+    this.enc = this.dec = this.aesKey = null;
+    this.unlockQ = []; this.unlockWait = null;
+    this.rx = Promise.resolve(); this.tx = Promise.resolve();
+    this.frameId = 0;
+    this.onNotify = this.onNotify.bind(this);
+  }
+
+  async connect(device, password) {
+    this.device = device;
+    const server = await withTimeout(device.gatt.connect(), 15000, "Bluetooth connection timed out");
+    const svc = await server.getPrimaryService(SERVICE_UUID);
+    this.writeChar = await svc.getCharacteristic(WRITE_UUID);
+    this.notifyChar = await svc.getCharacteristic(NOTIFY_UUID);
+    this.notifyChar.addEventListener("characteristicvaluechanged", this.onNotify);
+    await this.notifyChar.startNotifications();
+    await this.unlock(password);
+  }
+
+  close() {
+    try { this.notifyChar && this.notifyChar.removeEventListener("characteristicvaluechanged", this.onNotify); } catch {}
+    try { this.device && this.device.gatt.connected && this.device.gatt.disconnect(); } catch {}
+    this.enc = this.dec = null;
+  }
+
+  get connected() { return !!(this.device && this.device.gatt.connected && this.enc); }
+
+  onNotify(ev) {
+    const v = ev.target.value;
+    const data = new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength));
+    this.rx = this.rx.then(async () => {
+      const plain = this.dec ? await this.dec.update(data) : data;
+      for (const f of this.parser.feed(plain)) {
+        if (f[0] === 0xAC) this.gotUnlock(f); else this.onFrame(f);
+      }
+    }).catch(e => logLine("Receive error: " + e.message, "err"));
+  }
+
+  gotUnlock(f) {
+    if (f[1] === 4 && this.aesKey && f.length >= 58) {
+      // Switch to encryption right here, so the next packet is decrypted.
+      const r = f.subarray(2);
+      this.enc = new CtrStream(this.aesKey, r.slice(32, 44));   // phone -> XBee
+      this.dec = new CtrStream(this.aesKey, r.slice(44, 56));   // XBee -> phone
+    }
+    if (this.unlockWait) { const w = this.unlockWait; this.unlockWait = null; w(f); }
+    else this.unlockQ.push(f);
+  }
+
+  nextUnlock() {
+    if (this.unlockQ.length) return Promise.resolve(this.unlockQ.shift());
+    return withTimeout(new Promise(res => this.unlockWait = res), 10000, "The XBee didn't answer the unlock")
+      .finally(() => { this.unlockWait = null; });
+  }
+
+  async waitUnlock(step) {
+    for (;;) {
+      const f = await this.nextUnlock();
+      if (f[1] < step) continue;              // repeated earlier step
+      if (f[1] !== step) throw new Error(UNLOCK_ERRORS[f[1]] || `Unexpected unlock step 0x${f[1].toString(16)}`);
+      return f.slice(2);
+    }
+  }
+
+  async unlock(password) {
+    const I = utf8.encode("apiservice"), p = utf8.encode(password);
+    const a = b2i(crypto.getRandomValues(new Uint8Array(32)));
+    const A = i2b(modpow(SRP_G, a, SRP_N));
+    await this.writeFrame(concat([0x2C, 1], A));
+
+    let r = await this.waitUnlock(2);
+    const salt = r.slice(0, 4), B = b2i(r.slice(4, 132));
+    if (B % SRP_N === 0n) throw new Error("XBee sent an invalid SRP challenge");
+    const Bp = i2b(B), g1 = new Uint8Array([2]);
+    // k = H(N | g) with g as ONE byte; A, B and S padded to 128 bytes.
+    const k = b2i(await H(i2b(SRP_N), g1));
+    const u = b2i(await H(A, Bp));
+    const x = b2i(await H(salt, await H(I, utf8.encode(":"), p)));
+    const base = ((B - k * modpow(SRP_G, x, SRP_N)) % SRP_N + SRP_N) % SRP_N;
+    const K = await H(i2b(modpow(base, a + u * x, SRP_N)));
+    const hN = await H(i2b(SRP_N)), hg = await H(g1);
+    const M1 = await H(hN.map((v, i) => v ^ hg[i]), await H(I), salt, A, Bp, K);
+    this.aesKey = await crypto.subtle.importKey("raw", K, "AES-CTR", false, ["encrypt"]);
+    await this.writeFrame(concat([0x2C, 3], M1));
+
+    r = await this.waitUnlock(4);
+    if (!sameBytes(r.slice(0, 32), await H(A, M1, K)))
+      throw new Error("XBee failed to prove the password (M2 mismatch)");
+  }
+
+  writeFrame(data) {
+    const job = this.tx.then(async () => {
+      let raw = buildFrame(data);
+      if (this.enc) raw = await this.enc.update(raw);
+      for (let i = 0; i < raw.length; i += BLE_WRITE) {
+        const part = raw.slice(i, i + BLE_WRITE);
+        if (this.writeChar.writeValueWithResponse) await this.writeChar.writeValueWithResponse(part);
+        else await this.writeChar.writeValue(part);
+      }
+    });
+    this.tx = job.catch(() => {});
+    return job;
+  }
+
+  nextId() { this.frameId = this.frameId % 255 + 1; return this.frameId; }
+
+  async at(cmd, param = new Uint8Array(0)) {
+    const id = this.nextId();
+    await this.writeFrame(concat([0x08, id], utf8.encode(cmd), param));
+    return id;
+  }
+
+  async relay(iface, data) {
+    const id = this.nextId();
+    await this.writeFrame(concat([0x2D, id, iface], data));
+    return id;
+  }
+}
+
+// ================= Connection state =================
+let device = null, link = null, password = "";
+
+function needLink() {
+  if (!(link && link.connected)) throw new Error("Not connected to an XBee");
+  return link;
+}
+
+function dropLink() {
+  if (link) { link.close(); link = null; }
+}
+
+async function openLink() {
+  const l = new XBeeLink(onFrame);
+  try { await l.connect(device, password); }
+  catch (e) { l.close(); throw e; }
+  link = l;
+  setStatus(true);
+}
+
+function onGattDisconnected() {
+  if (link && !device.gatt.connected) {
+    link.close(); link = null;
+    logLine("XBee disconnected");
+  }
+  setStatus(!!(link && link.connected));
+}
+
+// ================= Frames from the XBee =================
+function onFrame(f) {
+  if (f[0] === 0xAD && f.length >= 5 && f[1] === 2 && f[2] === 0xA5 && f[3] === 0x5A) {
+    otaFeed(f.slice(4));            // reply from the updater: not shown as traffic
+    return;
+  }
+  if (f[0] === 0x89 && ota.busy && f.length >= 3) {
+    if (f[2]) { ota.refused++; otaRelayFailed(RELAY_STATUS[f[2]] || `status 0x${f[2].toString(16)}`); }
+    else ota.ok++;
+    return;
+  }
+  blink();
+  const t = f[0];
+  if (t === 0x88 && f.length >= 5) {
+    const cmd = String.fromCharCode(f[2], f[3]), st = AT_STATUS[f[4]] || `0x${f[4].toString(16)}`;
+    const val = f.slice(5);
+    logLine(`AT${cmd} ${st}${val.length ? ": " + printable(val) : ""}`, st === "OK" ? "in" : "err", hex(val));
+  } else if (t === 0xAD && f.length >= 2) {
+    logLine(`${IFACES[f[1]] ?? f[1]}: ${printable(f.slice(2))}`, "in", hex(f.slice(2)));
+  } else if (t === 0x89 && f.length >= 3) {
+    if (f[2] === 0) logLine(`Relay #${f[1]} delivered`);
+    else logLine(`Relay #${f[1]} failed: ${RELAY_STATUS[f[2]] || "status 0x" + f[2].toString(16)}`, "err");
+  } else if (t === 0x8A && f.length >= 2) {
+    logLine(`Modem status 0x${f[1].toString(16).padStart(2, "0")}`);
+  } else {
+    logLine("Frame", "in", hex(f));
+  }
+}
+
+// ================= MicroPython program updates (talks to lib/updater.py) =================
+const MAGIC = [0xA5, 0x5A];
+const OTA_CHUNK = 64;
+const OTA_MAX_SIZE = 200000;
+const OTA_STATUS = {
+  1: "the XBee wasn't expecting that step (transfer interrupted?)",
+  2: "chunks arrived out of order",
+  3: "the file arrived damaged (checksum mismatch)",
+  4: "the XBee couldn't write the file",
+  5: "not enough free space on the XBee",
+  6: "invalid file name",
+  7: "the XBee's updater doesn't know that command (update lib/updater.py)",
+};
+const NOT_INSTALLED = "The updater didn't answer, even after a reboot. Install it once with XCTU: " +
+  "main.py and lib/updater.py, and rename your program to app.py. MicroPython must autostart (PS = 1).";
+class OtaError extends Error {}
+class OtaTimeout extends Error {}
+
+const ota = { busy: false, waiter: null, ignoreFail: false, ok: 0, refused: 0, reconnectS: 0 };
+
+function otaFeed(p) {
+  const w = ota.waiter;
+  if (w && w.match(p)) { ota.waiter = null; w.resolve(p); }
+}
+function otaRelayFailed(reason) {
+  const w = ota.waiter;
+  if (w && !ota.ignoreFail) { ota.waiter = null; w.reject(new OtaError("MicroPython didn't take the data: " + reason)); }
+}
+
+async function otaRequest(body, match = null, timeout = 3000, retries = 3) {
+  const want = body[0] | 0x20;
+  for (let i = 0; i < retries; i++) {
+    const reply = new Promise((resolve, reject) => {
+      ota.waiter = { match: p => p[0] === want && (!match || match(p)), resolve, reject };
+    });
+    try {
+      await needLink().relay(2, concat(MAGIC, body));
+      const r = await Promise.race([reply, sleep(timeout).then(() => null)]);
+      if (r) return r;
+    } finally { ota.waiter = null; }
+  }
+  throw new OtaTimeout("The updater stopped answering");
+}
+
+function otaStatus(reply, what) {
+  if (reply[1] === 0) return;
+  let msg = `${what} failed: ${OTA_STATUS[reply[1]] || "status " + reply[1]}`;
+  const detail = reply[0] === 0x64 ? reply.slice(4) : reply.slice(2);
+  if ([0x62, 0x64, 0x65, 0x75].includes(reply[0]) && detail.length)
+    msg += ` (${new TextDecoder().decode(detail)})`;
+  throw new OtaError(msg);
+}
+
+async function otaPing(timeout = 2000, retries = 1, tolerant = false) {
+  ota.ignoreFail = tolerant;
+  try {
+    const r = await otaRequest(Uint8Array.of(0x50), null, timeout, retries);
+    return { mode: String.fromCharCode(r[3]), window: r[4], err: new TextDecoder().decode(r.slice(5)).trim() };
+  } catch (e) {
+    if (e instanceof OtaTimeout || e instanceof OtaError) return null;
+    throw e;
+  } finally { ota.ignoreFail = false; }
+}
+
+async function rebootAndReconnect() {
+  logLine("Rebooting the XBee…");
+  const t0 = performance.now();
+  try { await needLink().at("FR"); await sleep(1500); }
+  finally { dropLink(); setStatus(false); }
+  for (;;) {
+    try { await openLink(); break; }
+    catch (e) {
+      if (performance.now() - t0 > 30000) throw new Error("Couldn't reconnect after the reboot: " + e.message);
+      await sleep(1000);
+    }
+  }
+  const took = (performance.now() - t0) / 1000;
+  logLine(`Reconnected ${took.toFixed(1)} s after the reboot`);
+  return took;
+}
+
+function otaDiagnose() {
+  const t = ota.reconnectS;
+  if (ota.refused && !ota.ok)
+    return `The updater didn't answer: MicroPython isn't running on the XBee (it refused all ${ota.refused} ` +
+      "messages). Check PS = 1 and that /flash/main.py is the updater's boot loader. Open XCTU's " +
+      "MicroPython terminal and reset the XBee to see any error.";
+  if (ota.ok)
+    return `The updater didn't answer, but MicroPython accepted the messages (${ota.ok} delivered). ` +
+      "So a program is running but it isn't the updater: check /flash/main.py is the boot loader, " +
+      "that lib/updater.py is there, and there's no old main.mpy." +
+      (t > 8 ? ` Reconnecting took ${t.toFixed(0)} s, longer than the boot window; raise BOOT_WINDOW_MS in main.py.` : "");
+  return NOT_INSTALLED + ` (Reconnected ${t.toFixed(0)} s after the reboot.)`;
+}
+
+async function otaRecover() {
+  ota.reconnectS = await rebootAndReconnect();
+  logLine("Asking the updater to hold…");
+  ota.ignoreFail = true; ota.ok = ota.refused = 0;
+  try { await otaRequest(Uint8Array.of(0x48), null, 500, 40); }
+  catch (e) { if (e instanceof OtaTimeout) throw new OtaError(otaDiagnose()); throw e; }
+  finally { ota.ignoreFail = false; }
+  logLine("Updater is holding. app.py won't start until the next reboot.");
+}
+
+async function otaTakeControl() {
+  const info = await otaPing();
+  if (info) return info;
+  logLine("Updater not answering (the program doesn't call updater.poll). Rebooting the XBee to catch its boot window…");
+  await otaRecover();
+  return (await otaPing()) || { mode: "L", window: 0, err: "" };
+}
+
+function adler32(data) {
+  let a = 1, b = 0;
+  for (const c of data) { a = (a + c) % 65521; b = (b + a) % 65521; }
+  return [a, b];
+}
+
+async function otaUpload(name, data, reboot) {
+  const { mode } = await otaTakeControl();
+  const [a, b] = adler32(data), n = data.length;
+  const begin = concat([0x42, n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255,
+                        a >> 8, a & 255, b >> 8, b & 255], utf8.encode(name));
+  otaStatus(await otaRequest(begin), "Starting the upload");
+
+  const total = Math.ceil(n / OTA_CHUNK);
+  let seq = 0;
+  while (seq < total) {
+    const s = seq;
+    const r = await otaRequest(concat([0x44, s >> 8, s & 255], data.subarray(s * OTA_CHUNK, (s + 1) * OTA_CHUNK)),
+                               p => p[1] !== 0 || ((p[2] << 8) | p[3]) === s, 3000, 6);
+    if (r[1] === 2) { seq = (r[2] << 8) | r[3]; continue; }   // out of step: go where the XBee is
+    otaStatus(r, `Chunk ${s}`);
+    seq++;
+    showProgress(seq, total);
+  }
+
+  otaStatus(await otaRequest(Uint8Array.of(0x45), null, 5000), "Saving the file");
+  logLine(`Saved ${name} (${n} bytes). The previous version is kept as a .bak file.`);
+  if (reboot) await otaRestartAndCheck();
+  else if (mode === "A") logLine("The old program is still running. Reboot the XBee to start the new one.");
+}
+
+async function otaRestartAndCheck() {
+  await rebootAndReconnect();
+  const info = await otaPing(1000, 8, true);
+  const w = info ? info.window : 10;
+  logLine(`Waiting ${w + 2} s for the boot window to pass, then checking the program started…`);
+  await sleep((w + 2) * 1000);
+  otaReport(await otaPing(2000, 2));
+}
+
+function otaReport(info) {
+  let ok = true, msg;
+  if (!info) msg = "Program is running. It doesn't call updater.poll(), so the next update will reboot the XBee first.";
+  else if (info.mode === "A") msg = "Program is running and accepts updates.";
+  else { msg = "Updater is in control; app.py isn't running." + (info.err ? "\n" + info.err : ""); ok = !info.err; }
+  const box = $("otaInfo"); box.hidden = false; box.textContent = msg; box.classList.toggle("bad", !ok);
+  logLine(msg.split("\n")[0], ok ? "in" : "err");
+}
+
+async function otaList() {
+  await otaTakeControl();
+  const files = []; let start = 0;
+  while (start !== 255) {
+    const r = await otaRequest(Uint8Array.of(0x4C, start));
+    start = r[2];
+    for (const line of new TextDecoder().decode(r.slice(3)).split("\n")) {
+      if (!line) continue;
+      const [nm, size] = line.split("\t");
+      files.push({ name: nm, size: +size || 0 });
+    }
+  }
+  showFiles(files);
+}
+
+async function otaRollback(name) {
+  await otaTakeControl();
+  const r = await otaRequest(concat([0x55], utf8.encode(name)), null, 6000, 1);   // never repeat a swap
+  if (r[1] === 1) throw new OtaError(`There's no backup of ${name} to go back to`);
+  otaStatus(r, "Rollback");
+  logLine(`Restored the previous ${name}`);
+  await otaRestartAndCheck();
+}
+
+async function runOta(job) {
+  if (ota.busy) { logLine("Wait for the program update to finish.", "err"); return; }
+  ota.busy = true; setOtaBusy(true);
+  let lock = null;
+  try { lock = await navigator.wakeLock?.request("screen"); } catch {}
+  try { await job(); }
+  catch (e) { logLine(e.message || String(e), "err"); }
+  finally {
+    ota.busy = false; setOtaBusy(false);
+    try { await lock?.release(); } catch {}
+  }
+}
+
+// ================= Page =================
+const $ = id => document.getElementById(id);
+let dataFmt = "text";
+const PW_KEY = "xbee-phone-password";
+const store = {
+  get() { try { return localStorage.getItem(PW_KEY); } catch { return null; } },
+  set(v) { try { localStorage.setItem(PW_KEY, v); } catch {} },
+  clear() { try { localStorage.removeItem(PW_KEY); } catch {} },
+};
+
+function logLine(text, cls = "", hexStr = "") {
+  const d = document.createElement("div");
+  const t = document.createElement("time"); t.textContent = new Date().toLocaleTimeString([], { hour12: false });
+  const span = document.createElement("span"); span.className = cls; span.textContent = text;
+  d.append(t, span);
+  if (hexStr) { const h = document.createElement("span"); h.className = "hex"; h.textContent = hexStr; d.appendChild(h); }
+  const log = $("log"); const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+  log.appendChild(d);
+  while (log.children.length > 300) log.firstChild.remove();
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function blink() { const l = $("led"); l.classList.remove("blink"); void l.offsetWidth; l.classList.add("blink"); }
+
+function setStatus(isConnected) {
+  $("led").className = "led" + (isConnected ? " on" : "");
+  $("title").textContent = isConnected ? (device.name || "XBee") : "No XBee connected";
+  $("subtitle").textContent = isConnected ? "Linked over this phone's Bluetooth" : "Using this phone's Bluetooth";
+  $("disconnectBtn").disabled = !isConnected;
+  $("connectBtn").disabled = !device || isConnected;
+  document.querySelectorAll(".needs-link").forEach(b => b.classList.toggle("dim", !isConnected));
+}
+
+function ensureLink() {
+  if (link && link.connected) return true;
+  logLine("Not connected. Choose your XBee and tap Connect first.", "err");
+  return false;
+}
+
+function confirmReboot(cmd) {
+  if (cmd.toUpperCase() !== "FR") return true;
+  return confirm("Reboot the XBee?\n\nThe Bluetooth link will drop and you'll need to tap Connect again. " +
+    "Settings not saved with WR are lost.");
+}
+
+function toBytes(value, kind) {
+  if (!value) return new Uint8Array(0);
+  if (kind === "hex") {
+    const clean = value.replace(/0x/gi, "").replace(/[\s,]/g, "");
+    if (!/^([0-9a-f]{2})*$/i.test(clean)) throw new Error("Hex must be pairs of digits, like 48 65 6C");
+    return Uint8Array.from(clean.match(/../g) || [], x => parseInt(x, 16));
+  }
+  return utf8.encode(value);
+}
+
+// ---- Bluetooth support check ----
+if (!navigator.bluetooth) {
+  $("support").hidden = false;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  $("supportWhy").textContent = !window.isSecureContext
+    ? "This page must be opened over HTTPS (for example your Tailscale https://…ts.net address) before the browser allows Bluetooth."
+    : ios ? "iPhone and iPad browsers don't support Web Bluetooth. Open this page in the free Bluefy browser app instead."
+          : "Use Chrome on Android. Some browsers (e.g. Firefox) don't support Web Bluetooth.";
+  $("pickBtn").disabled = true;
+}
+
+// ---- Device ----
+$("pickBtn").onclick = async () => {
+  try {
+    const opts = $("showAll").checked
+      ? { acceptAllDevices: true, optionalServices: [SERVICE_UUID] }
+      : { filters: [{ services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID] };
+    const d = await navigator.bluetooth.requestDevice(opts);
+    if (device && device !== d) { dropLink(); device.removeEventListener("gattserverdisconnected", onGattDisconnected); }
+    device = d;
+    device.addEventListener("gattserverdisconnected", onGattDisconnected);
+    $("picked").hidden = false;
+    $("picked").innerHTML = "Selected: <b></b>"; $("picked").querySelector("b").textContent = device.name || "(no name)";
+    setStatus(false);
+  } catch (e) {
+    if (e.name !== "NotFoundError") logLine(e.message, "err");       // NotFoundError = picker cancelled
+    else if (!$("showAll").checked) logLine("No XBee chosen. If yours wasn't listed, tick “Show all Bluetooth devices”.");
+  }
+};
+
+$("connectBtn").onclick = async () => {
+  if (!device) return;
+  password = $("pw").value;
+  $("connectBtn").disabled = true; $("led").className = "led busy";
+  logLine(`Connecting to ${device.name || "XBee"}…`);
+  try {
+    dropLink();
+    await openLink();
+    logLine("Connected and unlocked");
+    if ($("rememberPw").checked) store.set(password);
+  } catch (e) {
+    logLine(e.message || String(e), "err");
+    setStatus(false);
+  }
+};
+$("disconnectBtn").onclick = () => { if (ota.busy) return; dropLink(); setStatus(false); logLine("Disconnected"); };
+
+// ---- Send data / AT ----
+$("dataFmt").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  dataFmt = b.dataset.v;
+  $("dataFmt").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("data").placeholder = dataFmt === "hex" ? "48 65 6C 6C 6F" : "Hello from my phone";
+};
+$("sendBtn").onclick = async () => {
+  if (!ensureLink()) return;
+  if (ota.busy) { logLine("Wait for the program update to finish.", "err"); return; }
+  try {
+    if (!$("data").value) throw new Error("Type a message to send first.");
+    let data = toBytes($("data").value, dataFmt);
+    if ($("newline").checked) data = concat(data, [13, 10]);
+    const iface = +$("iface").value;
+    const id = await link.relay(iface, data);
+    logLine(`→ ${IFACES[iface]}: ${printable(data)} (#${id})`);
+  } catch (e) { logLine(e.message, "err"); }
+};
+async function runAt(cmd, param = "", paramType = "text") {
+  cmd = cmd.trim().toUpperCase();
+  if (cmd.length !== 2) throw new Error("AT commands are 2 characters, like NI or SH");
+  await link.at(cmd, toBytes(param, paramType));
+  logLine(`AT${cmd} ${param}`.trim());
+}
+$("atBtn").onclick = async () => {
+  if (!ensureLink() || ota.busy) return;
+  const cmd = $("cmd").value;
+  if (!cmd.trim()) { logLine("Enter a 2-letter AT command, like NI.", "err"); return; }
+  if (!confirmReboot(cmd.trim())) return;
+  try { await runAt(cmd, $("param").value, $("paramHex").checked ? "hex" : "text"); }
+  catch (e) { logLine(e.message, "err"); }
+};
+$("chips").onclick = async e => {
+  const b = e.target.closest("button"); if (!b || !ensureLink() || ota.busy) return;
+  if (!confirmReboot(b.dataset.cmd)) return;
+  $("cmd").value = b.dataset.cmd; $("param").value = "";
+  try { await runAt(b.dataset.cmd); } catch (err) { logLine(err.message, "err"); }
+};
+$("clearBtn").onclick = () => $("log").innerHTML = "";
+
+// ---- Program updates ----
+function setOtaBusy(b) {
+  document.querySelectorAll(".ota").forEach(x => x.disabled = b);
+  $("otaUpload").textContent = b ? "Working…" : "Upload";
+  if (b) { $("otaBar").firstElementChild.style.width = "0"; }
+  else setTimeout(() => { if (!ota.busy) $("otaBar").hidden = true; }, 1500);
+}
+function showProgress(done, total) {
+  $("otaBar").hidden = false;
+  $("otaBar").firstElementChild.style.width = (100 * done / total) + "%";
+}
+function showFiles(files) {
+  const ul = $("otaFiles"); ul.innerHTML = ""; ul.hidden = false;
+  if (!files.length) { ul.innerHTML = "<li>No files</li>"; return; }
+  for (const f of files) {
+    const li = document.createElement("li");
+    const n = document.createElement("span"); n.textContent = f.name;
+    const z = document.createElement("small");
+    z.textContent = f.size >= 1024 ? (f.size / 1024).toFixed(1) + " KB" : f.size + " B";
+    li.append(n, z); ul.appendChild(li);
+  }
+}
+function otaTarget() {
+  const name = $("otaName").value.trim().replace(/^\/?(flash\/)?/, "");
+  const ok = name && name.length <= 60 && !name.includes("..") && /^[A-Za-z0-9._\-\/]+$/.test(name);
+  if (!ok) { logLine("Use a file name like app.py or lib/sensors.py", "err"); return null; }
+  return name;
+}
+$("otaFile").onchange = () => {
+  const f = $("otaFile").files[0];
+  $("otaFileName").textContent = f ? `${f.name} (${f.size} bytes)` : "No file chosen";
+};
+$("otaUpload").onclick = async () => {
+  if (!ensureLink()) return;
+  const f = $("otaFile").files[0];
+  if (!f) { logLine("Choose the file to upload first.", "err"); return; }
+  const name = otaTarget(); if (!name) return;
+  if (!f.size) { logLine("That file is empty.", "err"); return; }
+  if (f.size > OTA_MAX_SIZE) { logLine("That file is too big for the XBee.", "err"); return; }
+  if (["main.py", "main.mpy", "lib/updater.py"].includes(name) &&
+      !confirm(`Replace ${name}?\n\nThat's the updater itself. If the new file has a mistake, ` +
+               "you'll need XCTU and a cable to fix it. Your program normally goes in app.py.")) return;
+  const data = new Uint8Array(await f.arrayBuffer());
+  $("otaInfo").hidden = true;
+  logLine(`Uploading ${name} (${data.length} bytes)…`);
+  runOta(() => otaUpload(name, data, $("otaReboot").checked));
+};
+$("otaChips").onclick = e => {
+  const b = e.target.closest("button"); if (!b || !ensureLink()) return;
+  const kind = b.dataset.ota;
+  if (kind === "check") runOta(async () => otaReport(await otaPing(2000, 2)));
+  else if (kind === "list") runOta(otaList);
+  else if (kind === "rollback") {
+    const name = otaTarget(); if (!name) return;
+    if (!confirm(`Put back the previous ${name} and reboot?`)) return;
+    runOta(() => otaRollback(name));
+  } else if (kind === "recover") {
+    if (!confirm("Reboot the XBee and keep the program from starting?\n\n" +
+                 "Use this if the program is stuck. It starts again on the next reboot or upload.")) return;
+    runOta(otaRecover);
+  }
+};
+
+// ---- Password memory ----
+const savedPw = store.get();
+if (savedPw !== null) { $("pw").value = savedPw; $("rememberPw").checked = true; }
+$("rememberPw").onchange = () => {
+  if ($("rememberPw").checked) { if ($("pw").value) { store.set($("pw").value); logLine("Password saved on this phone"); } }
+  else if (store.get() !== null) { store.clear(); logLine("Saved password removed from this phone"); }
+};
+
+setStatus(false);
+</script>
+</body>
+</html>
